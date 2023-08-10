@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+
+while(<>){
+   next if(/^\s*#.*?$/);
+   next if(/^\s*$/);
+   next unless(/^(.*?)=(.*?)$/);
+
+   print "--build-arg", " ", $1, "=", "'",$2,"'"," ";
+}
+
+print "\n";
+
+# awk '{ sub ("\\\\$", " "); printf " --build-arg %s", $0  } END { print ""  }' $@

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+[[ -z "$1" ]] && echo "Missing filename"; exit 1
+
+for line in `cat $1 | grep -v #`; do
+  if [ ! -z "$line]; do
+   echo $line
+   export $line
+  fi
+done
