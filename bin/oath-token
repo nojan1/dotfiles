@@ -1,0 +1,78 @@
+#!/bin/bash
+
+Help()
+{
+   # Display Help
+   echo
+   echo "Syntax: oath-token [-h|r] <target>"
+   echo "options:"
+   echo "r     Remove cached token"
+   echo "h     Print this Help."
+   echo
+}
+
+WORKDIR=~/.config/oath-token
+TOKENDIR=$WORKDIR/tokens
+CONFIG=$WORKDIR/config.json
+
+[ ! -d "$TOKENDIR" ] && mkdir -p $TOKENDIR
+[ ! -f "$CONFIG" ] && (echo [] > $CONFIG) 
+
+while getopts ":hr" option; do
+   case $option in
+      h) 
+         Help
+         exit;;
+      r) 
+         removeToken=1;;
+     \?) 
+         echo "Error: Invalid option"
+         exit;;
+   esac
+done
+
+target=${@:$OPTIND:1}
+if [ -z "$target" ]; then
+   echo "No target specified, specify one of:"
+   cat $CONFIG | jq -r '.[].name'
+
+   exit 1
+fi
+
+tokenPath=$TOKENDIR/$target
+configObject=`cat $CONFIG | jq -r ".[] | select(.name == \"$target\")"`
+
+[ -z "$configObject" ] && echo "No such target" && exit 1
+[ ! -z "$removeToken" ] && rm $tokenPath
+
+if [ -f "$tokenPath" ]; then
+   expiry=`cat $tokenPath | jwt-jq '.exp'`
+   now=`date +%s`
+
+   if [ $expiry -gt $now ]; then
+      cat $tokenPath
+      exit 0
+   fi
+
+   # Token has expired, let it renew below
+fi
+
+domain=`echo $configObject | jq -r ".domain"`
+clientId=`echo $configObject | jq -r ".client_id"`
+clientSecret=`echo $configObject | jq -r ".client_secret"`
+audience=`echo $configObject | jq -r ".audience"`
+scope=`echo $configObject | jq -r ".scope"`
+redirectUri=`echo $configObject | jq -r ".redirect_uri"`
+localPort=`echo $configObject | jq -r ".local_port"`
+
+url="$domain/authorize?audience=$audience&scope=$scope&response_type=code&client_id=$clientId&redirect_uri=$redirectUri"
+open "$url"
+code=`echo -ne "HTTP/1.0 200 OK\r\n\r\n\r\nLogin complete, you can close this window" | nc -l $localPort | sed -n 's/^.*code=\(.*\) HTTP.*/\1/p'`
+
+tokenResponse=`curl -s -XPOST -d "grant_type=authorization_code&client_id=$clientId&client_secret=$clientSecret&code=$code&redirect_uri=$redirectUri" "$domain/oauth/token"`
+token=`echo $tokenResponse|jq -r '.access_token'`
+
+[ -z "$token" ] && echo "Error got no token!" && exit 1
+
+echo $token > $tokenPath
+echo $token

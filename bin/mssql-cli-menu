@@ -1,0 +1,24 @@
+#!/bin/bash
+
+CONFIG=~/.config/mssql-databases.json
+
+# if [ -z "$1" ]; then
+  selectedName=`cat $CONFIG | jq -r  '.[].name'| fzf`
+# else
+#   selectedName=$1
+# fi
+
+if [ -z "$selectedName" ]; then
+  exit 0
+fi
+
+export MSSQL_CLI_SERVER=`cat $CONFIG | jq -r ".[] | select(.name == \"$selectedName\") | .host"`
+export MSSQL_CLI_USER=`cat $CONFIG | jq -r ".[] | select(.name == \"$selectedName\") | .username"`
+export MSSQL_CLI_PASSWORD=`cat $CONFIG | jq -r ".[] | select(.name == \"$selectedName\") | .password"`
+
+database=`mssql-cli -Q '\ld' | tail -n +4 | ghead -n -2 | cut -d ' ' -f 2 | fzf`
+if [ -z "$database" ]; then
+  exit 0
+fi
+
+mssql-cli -d $database $@
